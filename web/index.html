@@ -120,7 +120,11 @@
 
 	<script>
 		// Filled in by Emscripten
-		var Module = {};
+		var Module = {
+			onRuntimeInitialized: function () {
+				Module._main();
+			}
+		};
 
 		// CHIP-8 keymap: physical key → CHIP-8 key index
 		const KEY_MAP = {

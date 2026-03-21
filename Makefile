@@ -4,7 +4,7 @@ EMCC = emcc
 CFLAGS = -Isrc -Wall -Wextra -std=c11 -O2
 EMFLAGS = -Isrc -std=gnu11 -O2 \
           -s WASM=1 \
-          -s EXPORTED_FUNCTIONS='["_wasm_load_rom","_wasm_load_rom_from_buffer","_wasm_get_rom_buffer","_wasm_set_key","_wasm_get_display"]' \
+          -s EXPORTED_FUNCTIONS='["_main","_wasm_load_rom","_wasm_load_rom_from_buffer","_wasm_get_rom_buffer","_wasm_set_key","_wasm_get_display"]' \
           -s EXPORTED_RUNTIME_METHODS='["HEAPU8","HEAPU32"]' \
           -s ALLOW_MEMORY_GROWTH=1
 
