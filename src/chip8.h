@@ -1,8 +1,10 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
-#define PC_START_ADDRESS 0x200;
+#define PC_START_ADDRESS 0x200
+#define CPU_FREQ 500
 
 typedef struct {
   uint8_t memory[4096];
@@ -13,8 +15,9 @@ typedef struct {
   uint8_t sp;
   uint8_t delay_timer;
   uint8_t sound_timer;
-  uint32_t display[64 * 32];
   uint8_t keypad[16];
+  uint32_t display[64 * 32];
+  bool draw_flag;
 } Chip8;
 
 extern const uint8_t chip8_fontset[80];
