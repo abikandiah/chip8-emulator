@@ -3,7 +3,8 @@
     {
       "name": "linux-gcc-x64",
       "includePath": [
-        "${workspaceFolder}/**"
+        "${workspaceFolder}/**",
+        "/opt/emsdk/upstream/emscripten/cache/sysroot/include"
       ],
       "compilerPath": "/usr/bin/gcc",
       "cStandard": "${default}",

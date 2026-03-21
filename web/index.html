@@ -1,174 +1,200 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CHIP-8 Emulator</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>CHIP-8 Emulator</title>
+	<style>
+		* {
+			box-sizing: border-box;
+			margin: 0;
+			padding: 0;
+		}
 
-    body {
-      background: #1a1a1a;
-      color: #e0e0e0;
-      font-family: monospace;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 24px;
-      gap: 16px;
-    }
+		body {
+			background: #1a1a1a;
+			color: #e0e0e0;
+			font-family: monospace;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			padding: 24px;
+			gap: 16px;
+		}
 
-    h1 { font-size: 1.4rem; letter-spacing: 0.1em; }
+		h1 {
+			font-size: 1.4rem;
+			letter-spacing: 0.1em;
+		}
 
-    canvas {
-      image-rendering: pixelated;
-      border: 2px solid #444;
-      width: 640px;
-      height: 320px;
-    }
+		canvas {
+			image-rendering: pixelated;
+			border: 2px solid #444;
+			width: 640px;
+			height: 320px;
+		}
 
-    .controls {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
+		.controls {
+			display: flex;
+			gap: 12px;
+			align-items: center;
+			flex-wrap: wrap;
+			justify-content: center;
+		}
 
-    label, select, .divider {
-      background: #333;
-      border: 1px solid #555;
-      padding: 6px 14px;
-      cursor: pointer;
-      border-radius: 4px;
-      color: #e0e0e0;
-      font-family: monospace;
-      font-size: 1rem;
-    }
-    label:hover { background: #444; }
-    select:hover { background: #444; }
-    select option { background: #1a1a1a; }
+		label,
+		select,
+		.divider {
+			background: #333;
+			border: 1px solid #555;
+			padding: 6px 14px;
+			cursor: pointer;
+			border-radius: 4px;
+			color: #e0e0e0;
+			font-family: monospace;
+			font-size: 1rem;
+		}
 
-    .divider {
-      cursor: default;
-      color: #555;
-      border-color: transparent;
-      background: transparent;
-      padding: 6px 2px;
-    }
+		label:hover {
+			background: #444;
+		}
 
-    input[type="file"] { display: none; }
+		select:hover {
+			background: #444;
+		}
 
-    #status {
-      font-size: 0.85rem;
-      color: #888;
-    }
+		select option {
+			background: #1a1a1a;
+		}
 
-    .keymap {
-      font-size: 0.75rem;
-      color: #666;
-      text-align: center;
-      line-height: 1.8;
-    }
-  </style>
+		.divider {
+			cursor: default;
+			color: #555;
+			border-color: transparent;
+			background: transparent;
+			padding: 6px 2px;
+		}
+
+		input[type="file"] {
+			display: none;
+		}
+
+		#status {
+			font-size: 0.85rem;
+			color: #888;
+		}
+
+		.keymap {
+			font-size: 0.75rem;
+			color: #666;
+			text-align: center;
+			line-height: 1.8;
+		}
+	</style>
 </head>
+
 <body>
-  <h1>CHIP-8</h1>
-  <canvas id="screen" width="64" height="32"></canvas>
+	<h1>CHIP-8</h1>
+	<canvas id="screen" width="64" height="32"></canvas>
 
-  <div class="controls">
-    <select id="romSelect">
-      <option value="">— Built-in ROMs —</option>
-      <option value="roms/glitchGhost.ch8">Glitch Ghost</option>
-    </select>
-    <span class="divider">or</span>
-    <label>
-      Upload ROM
-      <input type="file" id="romInput" accept=".ch8,.rom,.bin">
-    </label>
-    <span id="status">No ROM loaded</span>
-  </div>
+	<div class="controls">
+		<select id="romSelect">
+			<option value="">— Built-in ROMs —</option>
+			<option value="roms/RPS.ch8">Rock Paper Scissors</option>
+			<option value="roms/snake.ch8">Snake</option>
+			<option value="roms/glitchGhost.ch8">Glitch Ghost</option>
+			<option value="roms/rockto.ch8">Rockto</option>
+		</select>
+		<span class="divider">or</span>
+		<label>
+			Upload ROM
+			<input type="file" id="romInput" accept=".ch8,.rom,.bin">
+		</label>
+		<span id="status">No ROM loaded</span>
+	</div>
 
-  <div class="keymap">
-    Keyboard: 1234 / QWER / ASDF / ZXCV → CHIP-8 keys 1-C / 4-D / 7-E / A-F
-  </div>
+	<div class="keymap">
+		Keyboard: 1234 / QWER / ASDF / ZXCV → CHIP-8 keys 1-C / 4-D / 7-E / A-F
+	</div>
 
-  <script>
-    // Filled in by Emscripten
-    var Module = {};
+	<script>
+		// Filled in by Emscripten
+		var Module = {};
 
-    // CHIP-8 keymap: physical key → CHIP-8 key index
-    const KEY_MAP = {
-      '1': 0x1, '2': 0x2, '3': 0x3, '4': 0xC,
-      'q': 0x4, 'w': 0x5, 'e': 0x6, 'r': 0xD,
-      'a': 0x7, 's': 0x8, 'd': 0x9, 'f': 0xE,
-      'z': 0xA, 'x': 0x0, 'c': 0xB, 'v': 0xF,
-    };
+		// CHIP-8 keymap: physical key → CHIP-8 key index
+		const KEY_MAP = {
+			'1': 0x1, '2': 0x2, '3': 0x3, '4': 0xC,
+			'q': 0x4, 'w': 0x5, 'e': 0x6, 'r': 0xD,
+			'a': 0x7, 's': 0x8, 'd': 0x9, 'f': 0xE,
+			'z': 0xA, 'x': 0x0, 'c': 0xB, 'v': 0xF,
+		};
 
-    const canvas = document.getElementById('screen');
-    const ctx = canvas.getContext('2d');
-    const status = document.getElementById('status');
+		const canvas = document.getElementById('screen');
+		const ctx = canvas.getContext('2d');
+		const status = document.getElementById('status');
 
-    // Called from C via EM_ASM when draw_flag is set
-    function renderFrame() {
-      const ptr = Module._wasm_get_display();
-      // display is uint32_t[64*32]; read as 32-bit words from wasm heap
-      const display = new Uint32Array(Module.HEAPU32.buffer, ptr, 64 * 32);
+		// Called from C via EM_ASM when draw_flag is set
+		function renderFrame() {
+			const ptr = Module._wasm_get_display();
+			// display is uint32_t[64*32]; read as 32-bit words from wasm heap
+			const display = new Uint32Array(Module.HEAPU32.buffer, ptr, 64 * 32);
 
-      const imageData = ctx.createImageData(64, 32);
-      for (let i = 0; i < 64 * 32; i++) {
-        const on = display[i] ? 255 : 0;
-        imageData.data[i * 4 + 0] = on;
-        imageData.data[i * 4 + 1] = on;
-        imageData.data[i * 4 + 2] = on;
-        imageData.data[i * 4 + 3] = 255;
-      }
-      ctx.putImageData(imageData, 0, 0);
-    }
+			const imageData = ctx.createImageData(64, 32);
+			for (let i = 0; i < 64 * 32; i++) {
+				const on = display[i] ? 255 : 0;
+				imageData.data[i * 4 + 0] = on;
+				imageData.data[i * 4 + 1] = on;
+				imageData.data[i * 4 + 2] = on;
+				imageData.data[i * 4 + 3] = 255;
+			}
+			ctx.putImageData(imageData, 0, 0);
+		}
 
-    function loadRomBytes(data, name) {
-      const ptr = Module._malloc(data.length);
-      if (!ptr) { status.textContent = 'Error: out of memory'; return; }
-      Module.HEAPU8.set(data, ptr);
-      const result = Module._wasm_load_rom(ptr, data.length);
-      Module._free(ptr);
-      status.textContent = result === 0 ? `Running: ${name}` : 'Error: ROM too large';
-    }
+		function loadRomBytes(data, name) {
+			// Write directly into the C-side static staging buffer to avoid
+			// Module._malloc + HEAPU8 stale-buffer issues with ALLOW_MEMORY_GROWTH.
+			const ptr = Module._wasm_get_rom_buffer();
+			Module.HEAPU8.set(data, ptr);
+			const result = Module._wasm_load_rom_from_buffer(data.length);
+			status.textContent = result === 0 ? `Running: ${name}` : 'Error: ROM too large';
+		}
 
-    // Built-in ROM select
-    document.getElementById('romSelect').addEventListener('change', function(e) {
-      const path = e.target.value;
-      if (!path) return;
-      fetch(path)
-        .then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
-        .then(buf => loadRomBytes(new Uint8Array(buf), path.split('/').pop()))
-        .catch(() => { status.textContent = 'Error: failed to fetch ROM'; });
-    });
+		// Built-in ROM select
+		document.getElementById('romSelect').addEventListener('change', function (e) {
+			const path = e.target.value;
+			if (!path) return;
+			fetch(path)
+				.then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+				.then(buf => loadRomBytes(new Uint8Array(buf), path.split('/').pop()))
+				.catch(error => { console.log(error); status.textContent = 'Error: failed to fetch ROM'; });
+		});
 
-    // ROM file picker
-    document.getElementById('romInput').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(ev) {
-        loadRomBytes(new Uint8Array(ev.target.result), file.name);
-      };
-      reader.readAsArrayBuffer(file);
-    });
+		// ROM file picker
+		document.getElementById('romInput').addEventListener('change', function (e) {
+			const file = e.target.files[0];
+			if (!file) return;
+			const reader = new FileReader();
+			reader.onload = function (ev) {
+				loadRomBytes(new Uint8Array(ev.target.result), file.name);
+			};
+			reader.readAsArrayBuffer(file);
+		});
 
-    // Keyboard input
-    document.addEventListener('keydown', function(e) {
-      const key = KEY_MAP[e.key.toLowerCase()];
-      if (key !== undefined) Module._wasm_set_key(key, 1);
-    });
+		// Keyboard input
+		document.addEventListener('keydown', function (e) {
+			const key = KEY_MAP[e.key.toLowerCase()];
+			if (key !== undefined) Module._wasm_set_key(key, 1);
+		});
 
-    document.addEventListener('keyup', function(e) {
-      const key = KEY_MAP[e.key.toLowerCase()];
-      if (key !== undefined) Module._wasm_set_key(key, 0);
-    });
-  </script>
+		document.addEventListener('keyup', function (e) {
+			const key = KEY_MAP[e.key.toLowerCase()];
+			if (key !== undefined) Module._wasm_set_key(key, 0);
+		});
+	</script>
 
-  <!-- Load the Emscripten-generated JS (build with: make wasm) -->
-  <script src="chip8.js"></script>
+	<!-- Load the Emscripten-generated JS (build with: make wasm) -->
+	<script src="chip8.js"></script>
 </body>
+
 </html>

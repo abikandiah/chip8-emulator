@@ -6,13 +6,26 @@
 
 static Chip8* chip;
 
-static void wasm_reset(void) {
-  chip8_init(chip);
+// Static staging buffer for ROM upload — JS writes here directly,
+// avoiding Module._malloc/HEAPU8 stale-buffer issues with ALLOW_MEMORY_GROWTH.
+static uint8_t rom_staging[CHIP8_MEMORY_SIZE - PC_START_ADDRESS];
+
+static void wasm_reset(void) { chip8_init(chip); }
+
+EMSCRIPTEN_KEEPALIVE
+uint8_t* wasm_get_rom_buffer(void) { return rom_staging; }
+
+EMSCRIPTEN_KEEPALIVE
+int wasm_load_rom_from_buffer(int size) {
+  if (size <= 0 || size > (CHIP8_MEMORY_SIZE - PC_START_ADDRESS)) return -1;
+  wasm_reset();
+  memcpy(&chip->memory[PC_START_ADDRESS], rom_staging, size);
+  return 0;
 }
 
 EMSCRIPTEN_KEEPALIVE
 int wasm_load_rom(uint8_t* data, int size) {
-  if (size > (CHIP8_MEMORY_SIZE - PC_START_ADDRESS)) return -1;
+  if (size <= 0 || size > (CHIP8_MEMORY_SIZE - PC_START_ADDRESS)) return -1;
   wasm_reset();
   memcpy(&chip->memory[PC_START_ADDRESS], data, size);
   return 0;
@@ -20,14 +33,11 @@ int wasm_load_rom(uint8_t* data, int size) {
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_key(int key, int value) {
-  if (key >= 0 && key < KEYPAD_SIZE)
-    chip->keypad[key] = (uint8_t)value;
+  if (key >= 0 && key < KEYPAD_SIZE) chip->keypad[key] = (uint8_t)value;
 }
 
 EMSCRIPTEN_KEEPALIVE
-uint32_t* wasm_get_display(void) {
-  return chip->display;
-}
+uint32_t* wasm_get_display(void) { return chip->display; }
 
 static void wasm_frame(void) {
   if (!chip) return;
@@ -40,7 +50,7 @@ static void wasm_frame(void) {
   chip8_decrement_timers(chip);
 
   if (chip->draw_flag) {
-    EM_ASM( renderFrame(); );
+    EM_ASM(renderFrame(););
     chip->draw_flag = false;
   }
 }
