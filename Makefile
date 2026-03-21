@@ -16,6 +16,7 @@ SRCS = $(SRCDIR)/main.c $(SRCDIR)/chip8.c $(SRCDIR)/terminal.c
 OBJS = $(SRCS:.c=.o)
 
 WASM_SRCS = $(SRCDIR)/wasm_frontend.c $(SRCDIR)/chip8.c
+WASM_ROMS = web/roms/glitchGhost.ch8
 
 .PHONY: all wasm clean
 
@@ -28,12 +29,17 @@ $(TARGET): $(OBJS)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Wasm build
-wasm: $(WASM_TARGET)
+# Wasm build — produces full deployable web/ directory
+wasm: $(WASM_TARGET) $(WASM_ROMS)
 
 $(WASM_TARGET): $(WASM_SRCS) $(SRCDIR)/chip8.h
 	$(EMCC) $(EMFLAGS) $(WASM_SRCS) -o $(WASM_TARGET)
 
+web/roms/%: roms/%
+	mkdir -p web/roms
+	cp $< $@
+
 # Clean up
 clean:
 	rm -f $(OBJS) $(TARGET) $(WASM_TARGET) web/chip8.wasm
+	rm -rf web/roms

@@ -7,7 +7,6 @@
 #include <string.h>
 #include <time.h>
 
-
 static const uint8_t chip8_fontset[80] = {
     // 0
     0xF0,
@@ -119,7 +118,6 @@ void chip8_init(Chip8* chip) {
   srand(time(NULL));
 }
 
-
 int chip8_load_rom(Chip8* chip, const char* filename) {
   FILE* file = fopen(filename, "rb");
   if (!file) {
@@ -161,9 +159,13 @@ void chip8_decrement_timers(Chip8* chip) {
   if (chip->sound_timer > 0) chip->sound_timer--;
 }
 
+// Reference: http://devernay.free.fr/hacks/chip8/C8TECH10.HTM
 void chip8_step(Chip8* chip) {
   // pc and pc+1 must both be within the memory array
-  if (chip->pc > CHIP8_MEMORY_SIZE - 2) return;
+  if (chip->pc > CHIP8_MEMORY_SIZE - 2) {
+    fprintf(stderr, "Instruction overflow");
+    return;
+  }
 
   uint16_t instruction = ((uint16_t)chip->memory[chip->pc] << 8) | chip->memory[chip->pc + 1];
   uint16_t opcode = instruction & 0xF000;
@@ -179,14 +181,14 @@ void chip8_step(Chip8* chip) {
   switch (opcode) {
       // System
     case 0x0000: {
-      switch (instruction & 0x00FF) {
+      switch (kk) {
           // Clear
-        case 0x00E0: {
+        case 0xE0: {
           memset(chip->display, 0, sizeof(chip->display));
           chip->draw_flag = true;
         } break;
           // Return
-        case 0x00EE: {
+        case 0xEE: {
           if (chip->sp == 0) {
             fprintf(stderr, "Stack underflow at PC=0x%04X\n", chip->pc - 2);
             break;

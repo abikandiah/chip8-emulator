@@ -31,16 +31,31 @@
       display: flex;
       gap: 12px;
       align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
     }
 
-    label {
+    label, select, .divider {
       background: #333;
       border: 1px solid #555;
       padding: 6px 14px;
       cursor: pointer;
       border-radius: 4px;
+      color: #e0e0e0;
+      font-family: monospace;
+      font-size: 1rem;
     }
     label:hover { background: #444; }
+    select:hover { background: #444; }
+    select option { background: #1a1a1a; }
+
+    .divider {
+      cursor: default;
+      color: #555;
+      border-color: transparent;
+      background: transparent;
+      padding: 6px 2px;
+    }
 
     input[type="file"] { display: none; }
 
@@ -62,8 +77,13 @@
   <canvas id="screen" width="64" height="32"></canvas>
 
   <div class="controls">
+    <select id="romSelect">
+      <option value="">— Built-in ROMs —</option>
+      <option value="roms/glitchGhost.ch8">Glitch Ghost</option>
+    </select>
+    <span class="divider">or</span>
     <label>
-      Load ROM
+      Upload ROM
       <input type="file" id="romInput" accept=".ch8,.rom,.bin">
     </label>
     <span id="status">No ROM loaded</span>
@@ -106,25 +126,32 @@
       ctx.putImageData(imageData, 0, 0);
     }
 
+    function loadRomBytes(data, name) {
+      const ptr = Module._malloc(data.length);
+      if (!ptr) { status.textContent = 'Error: out of memory'; return; }
+      Module.HEAPU8.set(data, ptr);
+      const result = Module._wasm_load_rom(ptr, data.length);
+      Module._free(ptr);
+      status.textContent = result === 0 ? `Running: ${name}` : 'Error: ROM too large';
+    }
+
+    // Built-in ROM select
+    document.getElementById('romSelect').addEventListener('change', function(e) {
+      const path = e.target.value;
+      if (!path) return;
+      fetch(path)
+        .then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+        .then(buf => loadRomBytes(new Uint8Array(buf), path.split('/').pop()))
+        .catch(() => { status.textContent = 'Error: failed to fetch ROM'; });
+    });
+
     // ROM file picker
     document.getElementById('romInput').addEventListener('change', function(e) {
       const file = e.target.files[0];
       if (!file) return;
-
       const reader = new FileReader();
       reader.onload = function(ev) {
-        const data = new Uint8Array(ev.target.result);
-        const ptr = Module._malloc(data.length);
-        if (!ptr) { status.textContent = 'Error: out of memory'; return; }
-        Module.HEAPU8.set(data, ptr);
-        const result = Module._wasm_load_rom(ptr, data.length);
-        Module._free(ptr);
-
-        if (result === 0) {
-          status.textContent = `Running: ${file.name}`;
-        } else {
-          status.textContent = 'Error: ROM too large';
-        }
+        loadRomBytes(new Uint8Array(ev.target.result), file.name);
       };
       reader.readAsArrayBuffer(file);
     });
