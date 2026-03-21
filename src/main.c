@@ -19,12 +19,18 @@ int main(int argc, char* argv[]) {
   chip8_init(chip);
 
   if (chip8_load_rom(chip, argv[1]) != 0) {
+    free(chip);
     return 1;
   }
 
-  enable_raw_mode();
-  // blocking
-  chip8_start(chip);
+  if (enable_raw_mode() != 0) {
+    free(chip);
+    return 1;
+  }
 
+  // blocking
+  terminal_run(chip);
+
+  free(chip);
   return 0;
 }

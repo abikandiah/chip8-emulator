@@ -1,22 +1,39 @@
 # Variables
 CC = gcc
-CFLAGS = -Isrc -Wall -Wextra -std=c11
+EMCC = emcc
+CFLAGS = -Isrc -Wall -Wextra -std=c11 -O2
+EMFLAGS = -Isrc -std=c11 -O2 \
+          -s WASM=1 \
+          -s EXPORTED_FUNCTIONS='["_wasm_load_rom","_wasm_set_key","_wasm_get_display","_malloc","_free"]' \
+          -s EXPORTED_RUNTIME_METHODS='["HEAPU8","HEAPU32"]' \
+          -s ALLOW_MEMORY_GROWTH=1
+
 TARGET = chip8
+WASM_TARGET = web/chip8.js
 SRCDIR = src
+
 SRCS = $(SRCDIR)/main.c $(SRCDIR)/chip8.c $(SRCDIR)/terminal.c
 OBJS = $(SRCS:.c=.o)
 
-# The default 'all' target
+WASM_SRCS = $(SRCDIR)/wasm_frontend.c $(SRCDIR)/chip8.c
+
+.PHONY: all wasm clean
+
+# Default: terminal build
 all: $(TARGET)
 
-# Link the object files into the final executable
 $(TARGET): $(OBJS)
 	$(CC) $(OBJS) -o $(TARGET)
 
-# Compile .c files into .o files
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Clean up the folder
+# Wasm build
+wasm: $(WASM_TARGET)
+
+$(WASM_TARGET): $(WASM_SRCS) $(SRCDIR)/chip8.h
+	$(EMCC) $(EMFLAGS) $(WASM_SRCS) -o $(WASM_TARGET)
+
+# Clean up
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(OBJS) $(TARGET) $(WASM_TARGET) web/chip8.wasm

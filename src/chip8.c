@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 199309L
 #include "chip8.h"
 
 #include <stdbool.h>
@@ -8,12 +7,8 @@
 #include <string.h>
 #include <time.h>
 
-#include "terminal.h"
 
-static void chip8_step(Chip8* chip);
-static void chip8_decrement_timers(Chip8* chip);
-
-const uint8_t chip8_fontset[80] = {
+static const uint8_t chip8_fontset[80] = {
     // 0
     0xF0,
     0x90,
@@ -124,41 +119,6 @@ void chip8_init(Chip8* chip) {
   srand(time(NULL));
 }
 
-void chip8_start(Chip8* chip) {
-  int cycle_delay_ns = 1000000000 / CPU_FREQ;
-  int timer_counter = 0;
-
-  while (1) {
-    // Track elapsed time to more precisely hit targeted CPU_FREQ
-    struct timespec start, end, sleep_time;
-    clock_gettime(CLOCK_MONOTONIC, &start);
-
-    handle_terminal_input(chip->keypad);
-    chip8_step(chip);
-
-    // Timers limited to 60Hz
-    timer_counter += 60;
-    if (timer_counter >= CPU_FREQ) {
-      chip8_decrement_timers(chip);
-      timer_counter -= CPU_FREQ;
-    }
-
-    if (chip->draw_flag) {
-      render_terminal(chip->display);
-      chip->draw_flag = false;
-    }
-
-    clock_gettime(CLOCK_MONOTONIC, &end);
-    long elapsed_ns = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
-
-    // Only sleep for remaining time
-    if (elapsed_ns < cycle_delay_ns) {
-      sleep_time.tv_sec = 0;
-      sleep_time.tv_nsec = cycle_delay_ns - elapsed_ns;
-      nanosleep(&sleep_time, NULL);
-    }
-  }
-}
 
 int chip8_load_rom(Chip8* chip, const char* filename) {
   FILE* file = fopen(filename, "rb");
@@ -172,8 +132,13 @@ int chip8_load_rom(Chip8* chip, const char* filename) {
   long size = ftell(file);
   rewind(file);
 
-  // Max size is 4096 - 512 = 3584 bytes
-  if (size > (4096 - 512)) {
+  if (size < 0) {
+    fprintf(stderr, "Error determining ROM size.\n");
+    fclose(file);
+    return -1;
+  }
+
+  if (size > (CHIP8_MEMORY_SIZE - PC_START_ADDRESS)) {
     fprintf(stderr, "ROM is too large to fit in memory.\n");
     fclose(file);
     return -1;
@@ -197,6 +162,9 @@ void chip8_decrement_timers(Chip8* chip) {
 }
 
 void chip8_step(Chip8* chip) {
+  // pc and pc+1 must both be within the memory array
+  if (chip->pc > CHIP8_MEMORY_SIZE - 2) return;
+
   uint16_t instruction = ((uint16_t)chip->memory[chip->pc] << 8) | chip->memory[chip->pc + 1];
   uint16_t opcode = instruction & 0xF000;
 
@@ -219,7 +187,10 @@ void chip8_step(Chip8* chip) {
         } break;
           // Return
         case 0x00EE: {
-          if (chip->sp == 0) break;
+          if (chip->sp == 0) {
+            fprintf(stderr, "Stack underflow at PC=0x%04X\n", chip->pc - 2);
+            break;
+          }
           chip->sp--;
           chip->pc = chip->stack[chip->sp];
         } break;
@@ -231,7 +202,10 @@ void chip8_step(Chip8* chip) {
     } break;
       // Call subroutine
     case 0x2000: {
-      if (chip->sp >= 16) break;
+      if (chip->sp >= 16) {
+        fprintf(stderr, "Stack overflow at PC=0x%04X\n", chip->pc - 2);
+        break;
+      }
       chip->stack[chip->sp] = chip->pc;
       chip->sp++;
       chip->pc = nnn;
@@ -284,40 +258,32 @@ void chip8_step(Chip8* chip) {
           // Vx = Vx + Vy, Vf = carry
         case 0x04: {
           uint16_t sum = (uint16_t)chip->registers[x] + (uint16_t)chip->registers[y];
-          if (sum > 255) {
-            chip->registers[0xF] = 1;
-          } else {
-            chip->registers[0xF] = 0;
-          }
           chip->registers[x] = (uint8_t)(sum & 0xFF);
+          chip->registers[0xF] = (sum > 255) ? 1 : 0;
         } break;
           // Vx = Vx - Vy, Vf = not borrow
         case 0x05: {
-          if (chip->registers[x] >= chip->registers[y]) {
-            chip->registers[0xF] = 1;
-          } else {
-            chip->registers[0xF] = 0;
-          }
+          uint8_t no_borrow = chip->registers[x] >= chip->registers[y] ? 1 : 0;
           chip->registers[x] -= chip->registers[y];
+          chip->registers[0xF] = no_borrow;
         } break;
-          // SHR Vx {, Vy}
+          // SHR Vx, Vf = shifted-out bit
         case 0x06: {
-          chip->registers[0xF] = (chip->registers[x] & 0x01);
-          chip->registers[x] >>= 1;
+          uint8_t val = chip->registers[x];
+          chip->registers[x] = val >> 1;
+          chip->registers[0xF] = val & 0x01;
         } break;
-          // SUBN Vx, Vy, Vf = not borrow
+          // SUBN Vx = Vy - Vx, Vf = not borrow
         case 0x07: {
-          if (chip->registers[y] >= chip->registers[x]) {
-            chip->registers[0xF] = 1;
-          } else {
-            chip->registers[0xF] = 0;
-          }
+          uint8_t no_borrow = chip->registers[y] >= chip->registers[x] ? 1 : 0;
           chip->registers[x] = chip->registers[y] - chip->registers[x];
+          chip->registers[0xF] = no_borrow;
         } break;
-          // SHL Vx {, Vy}
+          // SHL Vx, Vf = shifted-out bit
         case 0x0E: {
-          chip->registers[0xF] = (chip->registers[x] & 0x80) >> 7;
-          chip->registers[x] <<= 1;
+          uint8_t val = chip->registers[x];
+          chip->registers[x] = val << 1;
+          chip->registers[0xF] = (val & 0x80) >> 7;
         } break;
       }
     } break;
@@ -342,6 +308,7 @@ void chip8_step(Chip8* chip) {
     } break;
       // Display n-byte sprite starting at index at (Vx, Vy)
     case 0xD000: {
+      if (chip->index + n > CHIP8_MEMORY_SIZE) break;
       uint8_t x_pos = chip->registers[x] % 64;
       uint8_t y_pos = chip->registers[y] % 32;
       chip->registers[0xF] = 0;
@@ -432,6 +399,7 @@ void chip8_step(Chip8* chip) {
         } break;
           // BCD of Vx in I, I+1 and I+2
         case 0x33: {
+          if (chip->index + 2 > CHIP8_MEMORY_SIZE - 1) break;
           uint8_t reg_x = chip->registers[x];
           chip->memory[chip->index] = reg_x / 100;
           chip->memory[chip->index + 1] = (reg_x / 10) % 10;
@@ -439,10 +407,12 @@ void chip8_step(Chip8* chip) {
         } break;
           // Store V0 through Vx in memory starting at I
         case 0x55: {
+          if (chip->index + x > CHIP8_MEMORY_SIZE - 1) break;
           memcpy(&chip->memory[chip->index], chip->registers, x + 1);
         } break;
           // Read V0 through Vx from memory starting at I
         case 0x65: {
+          if (chip->index + x > CHIP8_MEMORY_SIZE - 1) break;
           memcpy(chip->registers, &chip->memory[chip->index], x + 1);
         } break;
       }

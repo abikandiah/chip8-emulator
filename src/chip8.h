@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define CHIP8_MEMORY_SIZE 4096
 #define PC_START_ADDRESS 0x200
 #define CPU_FREQ 500
 #define KEYPAD_SIZE 16
@@ -21,8 +22,7 @@ typedef struct {
   bool draw_flag;
 } Chip8;
 
-extern const uint8_t chip8_fontset[80];
-
 void chip8_init(Chip8* chip);
 int chip8_load_rom(Chip8* chip, const char* filename);
-void chip8_start(Chip8* chip);
+void chip8_step(Chip8* chip);
+void chip8_decrement_timers(Chip8* chip);
