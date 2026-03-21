@@ -1,13 +1,17 @@
 #define _POSIX_C_SOURCE 199309L
-#include <chip8.h>
+#include "chip8.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termios.h>
 #include <time.h>
-#include <unistd.h>
+
+#include "terminal.h"
+
+static void chip8_step(Chip8* chip);
+static void chip8_decrement_timers(Chip8* chip);
 
 const uint8_t chip8_fontset[80] = {
     // 0
@@ -108,29 +112,6 @@ const uint8_t chip8_fontset[80] = {
     0x80,
 };
 
-struct termios original_termios;
-
-// Restore the terminal to how it was before
-void disable_raw_mode() { tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios); }
-
-void enable_raw_mode() {
-  // Get current terminal attributes
-  tcgetattr(STDIN_FILENO, &original_termios);
-
-  // Register 'disable' to run on exit
-  atexit(disable_raw_mode);
-
-  struct termios raw = original_termios;
-
-  // Flip the bits to disable "Echo" and "Canonical" mode
-  raw.c_lflag &= ~(ICANON | ECHO);
-  raw.c_cc[VMIN] = 0;
-  raw.c_cc[VTIME] = 0;
-
-  // Set the new attributes
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-}
-
 void chip8_init(Chip8* chip) {
   // Zero mem and set PC to start address
   memset(chip, 0, sizeof(Chip8));
@@ -140,9 +121,6 @@ void chip8_init(Chip8* chip) {
   // Load fontset in the start of memory
   memcpy(chip->memory, chip8_fontset, sizeof(chip8_fontset));
 
-  // Buffer stdout for terminal rendering
-  setvbuf(stdout, NULL, _IOFBF, 64 * 32 * 4);
-  // Seed random
   srand(time(NULL));
 }
 
@@ -155,18 +133,18 @@ void chip8_start(Chip8* chip) {
     struct timespec start, end, sleep_time;
     clock_gettime(CLOCK_MONOTONIC, &start);
 
-    chip8_handle_termnal_input(chip);
+    handle_terminal_input(chip->keypad);
     chip8_step(chip);
 
     // Timers limited to 60Hz
     timer_counter += 60;
     if (timer_counter >= CPU_FREQ) {
       chip8_decrement_timers(chip);
-      timer_counter -= 60;
+      timer_counter -= CPU_FREQ;
     }
 
     if (chip->draw_flag) {
-      chip8_render_terminal(chip);
+      render_terminal(chip->display);
       chip->draw_flag = false;
     }
 
@@ -182,7 +160,7 @@ void chip8_start(Chip8* chip) {
   }
 }
 
-int chip_8_load_rom(Chip8* chip, const char* filename) {
+int chip8_load_rom(Chip8* chip, const char* filename) {
   FILE* file = fopen(filename, "rb");
   if (!file) {
     perror("Error opening ROM");
@@ -213,100 +191,6 @@ int chip_8_load_rom(Chip8* chip, const char* filename) {
   return 0;
 }
 
-void chip8_render_terminal(Chip8* chip) {
-  // Move cursor to top-left (avoids flickering)
-  printf("\033[H");
-
-  for (int y = 0; y < 32; y++) {
-    for (int x = 0; x < 64; x++) {
-      if (chip->display[y * 64 + x]) {
-        printf("██");
-        // printf("##");
-      } else {
-        printf("  ");
-      }
-    }
-    printf("\n");
-  }
-}
-
-void chip8_handle_termnal_input(Chip8* chip) {
-  // Reset all keys
-  memset(chip->keypad, 0, sizeof(chip->keypad));
-
-  char c = 0;
-  while (read(STDIN_FILENO, &c, 1) == 1) {
-    switch (c) {
-      case '1':
-        chip->keypad[0x1] = 1;
-        break;
-      case '2':
-        chip->keypad[0x2] = 1;
-        break;
-      case '3':
-        chip->keypad[0x3] = 1;
-        break;
-      case '4':
-        chip->keypad[0xC] = 1;
-        break;
-      case 'q':
-      case 'Q':
-        chip->keypad[0x4] = 1;
-        break;
-      case 'w':
-      case 'W':
-        chip->keypad[0x5] = 1;
-        break;
-      case 'e':
-      case 'E':
-        chip->keypad[0x6] = 1;
-        break;
-      case 'r':
-      case 'R':
-        chip->keypad[0xD] = 1;
-        break;
-      case 'a':
-      case 'A':
-        chip->keypad[0x7] = 1;
-        break;
-      case 's':
-      case 'S':
-        chip->keypad[0x8] = 1;
-        break;
-      case 'd':
-      case 'D':
-        chip->keypad[0x9] = 1;
-        break;
-      case 'f':
-      case 'F':
-        chip->keypad[0xE] = 1;
-        break;
-      case 'z':
-      case 'Z':
-        chip->keypad[0xA] = 1;
-        break;
-      case 'x':
-      case 'X':
-        chip->keypad[0x0] = 1;
-        break;
-      case 'c':
-      case 'C':
-        chip->keypad[0xB] = 1;
-        break;
-      case 'v':
-      case 'V':
-        chip->keypad[0xF] = 1;
-        break;
-
-      // 'Esc' kill switch
-      case 27:
-      case 3:
-        exit(0);
-        break;
-    }
-  }
-}
-
 void chip8_decrement_timers(Chip8* chip) {
   if (chip->delay_timer > 0) chip->delay_timer--;
   if (chip->sound_timer > 0) chip->sound_timer--;
@@ -335,6 +219,7 @@ void chip8_step(Chip8* chip) {
         } break;
           // Return
         case 0x00EE: {
+          if (chip->sp == 0) break;
           chip->sp--;
           chip->pc = chip->stack[chip->sp];
         } break;
@@ -346,6 +231,7 @@ void chip8_step(Chip8* chip) {
     } break;
       // Call subroutine
     case 0x2000: {
+      if (chip->sp >= 16) break;
       chip->stack[chip->sp] = chip->pc;
       chip->sp++;
       chip->pc = nnn;

@@ -1,6 +1,8 @@
-#include <chip8.h>
 #include <stdio.h>
-#include <time.h>
+#include <stdlib.h>
+
+#include "chip8.h"
+#include "terminal.h"
 
 int main(int argc, char* argv[]) {
   if (argc < 2) {
@@ -16,15 +18,13 @@ int main(int argc, char* argv[]) {
 
   chip8_init(chip);
 
-  if (chip_8_load_rom(chip, argv[1]) != 0) {
+  if (chip8_load_rom(chip, argv[1]) != 0) {
     return 1;
   }
 
   enable_raw_mode();
   // blocking
   chip8_start(chip);
-
-  free(chip);
 
   return 0;
 }

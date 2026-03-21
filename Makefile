@@ -1,16 +1,17 @@
 # Variables
 CC = gcc
-CFLAGS = -I. -Wall -Wextra -std=c11
+CFLAGS = -Isrc -Wall -Wextra -std=c11
 TARGET = chip8
-SRC = main.c chip8.c
-OBJ = $(SRC:.c=.o)
+SRCDIR = src
+SRCS = $(SRCDIR)/main.c $(SRCDIR)/chip8.c $(SRCDIR)/terminal.c
+OBJS = $(SRCS:.c=.o)
 
 # The default 'all' target
 all: $(TARGET)
 
 # Link the object files into the final executable
-$(TARGET): $(OBJ)
-	$(CC) $(OBJ) -o $(TARGET)
+$(TARGET): $(OBJS)
+	$(CC) $(OBJS) -o $(TARGET)
 
 # Compile .c files into .o files
 %.o: %.c
@@ -18,4 +19,4 @@ $(TARGET): $(OBJ)
 
 # Clean up the folder
 clean:
-	rm -f $(OBJ) $(TARGET)
+	rm -f $(OBJS) $(TARGET)
