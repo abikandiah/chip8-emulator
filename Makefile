@@ -4,7 +4,7 @@ EMCC = emcc
 CFLAGS = -Isrc -Wall -Wextra -std=c11 -O2
 EMFLAGS = -Isrc -std=gnu11 -O2 \
           -s WASM=1 \
-          -s EXPORTED_FUNCTIONS='["_main","_wasm_load_rom","_wasm_load_rom_from_buffer","_wasm_get_rom_buffer","_wasm_set_key","_wasm_get_display"]' \
+          -s EXPORTED_FUNCTIONS='["_main","_wasm_load_rom","_wasm_load_rom_from_buffer","_wasm_get_rom_buffer","_wasm_set_key","_wasm_get_display","_wasm_reset_rom","_wasm_set_paused"]' \
           -s EXPORTED_RUNTIME_METHODS='["HEAPU8","HEAPU32"]' \
           -s ALLOW_MEMORY_GROWTH=1
 
@@ -16,7 +16,7 @@ SRCS = $(SRCDIR)/main.c $(SRCDIR)/chip8.c $(SRCDIR)/terminal.c
 OBJS = $(SRCS:.c=.o)
 
 WASM_SRCS = $(SRCDIR)/wasm_frontend.c $(SRCDIR)/chip8.c
-WASM_ROMS = web/roms/glitchGhost.ch8 web/roms/rockto.ch8 web/roms/RPS.ch8 web/roms/snake.ch8
+WASM_ROMS = web/roms/glitchGhost.ch8 web/roms/RPS.ch8 web/roms/snake.ch8
 
 .PHONY: all wasm clean
 

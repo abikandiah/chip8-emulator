@@ -19,6 +19,8 @@
 			display: flex;
 			flex-direction: column;
 			align-items: center;
+			justify-content: center;
+			min-height: 100dvh;
 			padding: 24px;
 			gap: 16px;
 		}
@@ -31,8 +33,8 @@
 		canvas {
 			image-rendering: pixelated;
 			border: 2px solid #444;
-			width: 640px;
-			height: 320px;
+			width: min(640px, calc(100vw - 48px));
+			aspect-ratio: 2 / 1;
 		}
 
 		.controls {
@@ -45,6 +47,7 @@
 
 		label,
 		select,
+		button,
 		.divider {
 			background: #333;
 			border: 1px solid #555;
@@ -56,12 +59,18 @@
 			font-size: 1rem;
 		}
 
-		label:hover {
+		label:hover,
+		button:hover {
 			background: #444;
 		}
 
 		select:hover {
 			background: #444;
+		}
+
+		button:disabled {
+			opacity: 0.4;
+			cursor: default;
 		}
 
 		select option {
@@ -91,6 +100,16 @@
 			text-align: center;
 			line-height: 1.8;
 		}
+
+		.keymap a {
+			color: #888;
+			text-decoration: underline;
+			text-underline-offset: 3px;
+		}
+
+		.keymap a:hover {
+			color: #bbb;
+		}
 	</style>
 </head>
 
@@ -101,21 +120,24 @@
 	<div class="controls">
 		<select id="romSelect">
 			<option value="">— Built-in ROMs —</option>
-			<option value="roms/RPS.ch8">Rock Paper Scissors</option>
 			<option value="roms/snake.ch8">Snake</option>
+			<option value="roms/RPS.ch8">Rock Paper Scissors</option>
 			<option value="roms/glitchGhost.ch8">Glitch Ghost</option>
-			<option value="roms/rockto.ch8">Rockto</option>
 		</select>
 		<span class="divider">or</span>
 		<label>
 			Upload ROM
 			<input type="file" id="romInput" accept=".ch8,.rom,.bin">
 		</label>
-		<span id="status">No ROM loaded</span>
+		<span class="divider">|</span>
+		<button id="resetBtn" disabled>Reset</button>
+		<button id="pauseBtn" disabled>Pause</button>
 	</div>
+	<span id="status">No ROM loaded</span>
 
 	<div class="keymap">
-		Keyboard: 1234 / QWER / ASDF / ZXCV → CHIP-8 keys 1-C / 4-D / 7-E / A-F
+		Keyboard: 1234 / QWER / ASDF / ZXCV → CHIP-8 keys 1-C / 4-D / 7-E / A-F<br>
+		More ROMs: <a href="https://johnearnest.github.io/chip8Archive/" target="_blank" rel="noopener">chip8Archive</a>
 	</div>
 
 	<script>
@@ -123,6 +145,9 @@
 		var Module = {
 			onRuntimeInitialized: function () {
 				Module._main();
+				// Auto-load the first ROM once the WASM runtime is ready
+				loadRomFromPath('roms/snake.ch8', 'Snake');
+				document.getElementById('romSelect').value = 'roms/snake.ch8';
 			}
 		};
 
@@ -137,6 +162,10 @@
 		const canvas = document.getElementById('screen');
 		const ctx = canvas.getContext('2d');
 		const status = document.getElementById('status');
+		const resetBtn = document.getElementById('resetBtn');
+		const pauseBtn = document.getElementById('pauseBtn');
+
+		let paused = false;
 
 		// Called from C via EM_ASM when draw_flag is set
 		function renderFrame() {
@@ -161,17 +190,34 @@
 			const ptr = Module._wasm_get_rom_buffer();
 			Module.HEAPU8.set(data, ptr);
 			const result = Module._wasm_load_rom_from_buffer(data.length);
-			status.textContent = result === 0 ? `Running: ${name}` : 'Error: ROM too large';
+			if (result === 0) {
+				status.textContent = `Running: ${name}`;
+				// Resume if paused, and clear the paused state
+				if (paused) {
+					paused = false;
+					Module._wasm_set_paused(0);
+					pauseBtn.textContent = 'Pause';
+				}
+				renderFrame(); // clear leftover display from previous ROM
+				resetBtn.disabled = false;
+				pauseBtn.disabled = false;
+			} else {
+				status.textContent = 'Error: ROM too large';
+			}
+		}
+
+		function loadRomFromPath(path, name) {
+			fetch(path)
+				.then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+				.then(buf => loadRomBytes(new Uint8Array(buf), name || path.split('/').pop()))
+				.catch(() => { status.textContent = 'Error: failed to fetch ROM'; });
 		}
 
 		// Built-in ROM select
 		document.getElementById('romSelect').addEventListener('change', function (e) {
 			const path = e.target.value;
 			if (!path) return;
-			fetch(path)
-				.then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
-				.then(buf => loadRomBytes(new Uint8Array(buf), path.split('/').pop()))
-				.catch(error => { console.log(error); status.textContent = 'Error: failed to fetch ROM'; });
+			loadRomFromPath(path);
 		});
 
 		// ROM file picker
@@ -181,8 +227,33 @@
 			const reader = new FileReader();
 			reader.onload = function (ev) {
 				loadRomBytes(new Uint8Array(ev.target.result), file.name);
+				// Clear select so user can re-pick the same file later
+				document.getElementById('romSelect').value = '';
 			};
 			reader.readAsArrayBuffer(file);
+		});
+
+		// Reset current ROM
+		resetBtn.addEventListener('click', function () {
+			if (Module._wasm_reset_rom() === 0) {
+				if (paused) {
+					paused = false;
+					Module._wasm_set_paused(0);
+					pauseBtn.textContent = 'Pause';
+				}
+				renderFrame();
+				status.textContent = status.textContent.replace(/^Paused: /, 'Running: ');
+			}
+		});
+
+		// Pause / Resume
+		pauseBtn.addEventListener('click', function () {
+			paused = !paused;
+			Module._wasm_set_paused(paused ? 1 : 0);
+			pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+			status.textContent = status.textContent
+				.replace(/^Running: /, paused ? 'Paused: ' : 'Running: ')
+				.replace(/^Paused: /, paused ? 'Paused: ' : 'Running: ');
 		});
 
 		// Keyboard input
