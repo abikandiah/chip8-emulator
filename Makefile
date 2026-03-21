@@ -16,7 +16,7 @@ SRCS = $(SRCDIR)/main.c $(SRCDIR)/chip8.c $(SRCDIR)/terminal.c
 OBJS = $(SRCS:.c=.o)
 
 WASM_SRCS = $(SRCDIR)/wasm_frontend.c $(SRCDIR)/chip8.c
-WASM_ROMS = web/roms/glitchGhost.ch8 web/roms/RPS.ch8 web/roms/snake.ch8
+WASM_ROMS = web/roms/RPS.ch8 web/roms/snake.ch8 web/roms/br8kout.ch8
 
 .PHONY: all wasm clean
 
